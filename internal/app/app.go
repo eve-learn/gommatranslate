@@ -13,7 +13,6 @@ import (
 	"translategemma-ui/internal/runtimeutil"
 	"translategemma-ui/internal/tui"
 	"translategemma-ui/internal/version"
-	"translategemma-ui/internal/web"
 )
 
 // Run is the single process entrypoint for CLI, TUI, and WebUI modes.
@@ -28,14 +27,12 @@ func Run(args []string) error {
 	fs := flag.NewFlagSet("translategemma-ui", flag.ContinueOnError)
 	var (
 		tuiMode     bool
-		webMode     bool
 		listen      string
 		showHelp    bool
 		showVersion bool
 	)
 
 	fs.BoolVar(&tuiMode, "tui", false, "Run Bubble Tea interface")
-	fs.BoolVar(&webMode, "webui", false, "Run local web interface")
 	fs.StringVar(&listen, "listen", "127.0.0.1:8090", "Web UI listen address")
 	fs.BoolVar(&showHelp, "help", false, "Show help")
 	fs.BoolVar(&showHelp, "h", false, "Show help")
@@ -52,7 +49,7 @@ func Run(args []string) error {
 		fmt.Println(version.String())
 		return nil
 	}
-	if tuiMode && webMode {
+	if tuiMode {
 		return errors.New("flags --tui and --webui are mutually exclusive")
 	}
 
@@ -64,8 +61,6 @@ func Run(args []string) error {
 	switch {
 	case tuiMode:
 		return tui.Run("", root)
-	case webMode:
-		return web.Run(listen, "", root)
 	default:
 		printUsage(fs)
 		return nil
