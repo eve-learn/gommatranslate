@@ -13,7 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"translategemma-ui/internal/runtime"
+	"github.com/eve-learn/gommatranslate/internal/runtime"
 )
 
 const (

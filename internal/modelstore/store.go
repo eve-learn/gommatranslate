@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"translategemma-ui/internal/config"
-	"translategemma-ui/internal/models"
-	"translategemma-ui/internal/platform"
-	"translategemma-ui/internal/runtimeutil"
+	"github.com/eve-learn/gommatranslate/internal/config"
+	"github.com/eve-learn/gommatranslate/internal/models"
+	"github.com/eve-learn/gommatranslate/internal/platform"
+	"github.com/eve-learn/gommatranslate/internal/runtimeutil"
 )
 
 type CatalogItem struct {

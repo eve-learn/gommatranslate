@@ -1,6 +1,7 @@
 package llamafile
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"translategemma-ui/internal/runtime"
+	"github.com/eve-learn/gommatranslate/internal/runtime"
 )
 
 type launchCandidate struct {
@@ -168,11 +169,22 @@ func (m *Manager) StopOwned() error {
 
 // EnsureRunning starts the runtime if backend health checks fail.
 func (m *Manager) EnsureRunning() (runtime.Status, error) {
-	return m.EnsureRunningWithProgress(nil)
+	return m.EnsureRunningWithContext(context.Background(), nil)
 }
 
 // EnsureRunningWithProgress starts the runtime and emits coarse loading progress.
 func (m *Manager) EnsureRunningWithProgress(onProgress func(Progress)) (runtime.Status, error) {
+	return m.EnsureRunningWithContext(context.Background(), onProgress)
+}
+
+// EnsureRunningWithContext starts the runtime and returns when it is ready or ctx is canceled.
+func (m *Manager) EnsureRunningWithContext(ctx context.Context, onProgress func(Progress)) (runtime.Status, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return runtime.Status{Ready: false, Message: err.Error()}, err
+	}
 	reportProgress(onProgress, Progress{Stage: "load", Percent: 0, Message: "Checking runtime status"})
 	backendURL := m.CurrentBackendURL()
 	if status := m.RuntimeStatus(); status.Ready {
@@ -226,6 +238,10 @@ func (m *Manager) EnsureRunningWithProgress(onProgress func(Progress)) (runtime.
 	if fileExists(launch.Path) {
 		_ = os.Chmod(launch.Path, 0o755)
 	}
+	if err := ctx.Err(); err != nil {
+		_ = logf.Close()
+		return runtime.Status{Ready: false, Message: err.Error()}, err
+	}
 	cmd := exec.Command(launch.Path, launch.Args...)
 	prepareLaunchCommand(cmd)
 	cmd.Stdout = logf
@@ -257,6 +273,10 @@ func (m *Manager) EnsureRunningWithProgress(onProgress func(Progress)) (runtime.
 
 	deadline := time.Now().Add(30 * time.Second)
 	for {
+		if err := ctx.Err(); err != nil {
+			m.killOwnedLocked()
+			return runtime.Status{Ready: false, Message: err.Error()}, err
+		}
 		now := time.Now()
 		if !now.Before(deadline) {
 			break
@@ -272,7 +292,14 @@ func (m *Manager) EnsureRunningWithProgress(onProgress func(Progress)) (runtime.
 			percent = 95
 		}
 		reportProgress(onProgress, Progress{Stage: "load", Percent: percent, Message: "Loading model into runtime"})
-		time.Sleep(500 * time.Millisecond)
+		timer := time.NewTimer(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			m.killOwnedLocked()
+			return runtime.Status{Ready: false, Message: ctx.Err().Error()}, ctx.Err()
+		case <-timer.C:
+		}
 	}
 	return runtime.Status{Ready: false, Message: "runtime started but backend is still unreachable"}, fmt.Errorf("backend not reachable after launch; inspect %s", m.LogFile)
 }
@@ -422,6 +449,21 @@ func (m *Manager) clearOwnedPID() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.ownedPID = 0
+}
+
+// killOwnedLocked stops the process started by this manager. The caller must hold m.mu.
+func (m *Manager) killOwnedLocked() {
+	if m.cmd == nil || m.cmd.Process == nil {
+		return
+	}
+	proc := m.cmd.Process
+	pid := proc.Pid
+	_ = killManagedProcess(proc)
+	m.cmd = nil
+	if m.ownedPID == pid {
+		m.ownedPID = 0
+	}
+	_ = os.Remove(m.PidFile)
 }
 
 func (m *Manager) preferredPath() string {

@@ -1,9 +1,54 @@
 package languages
 
-const (
-	autoDetectCode = "auto"
-	unknownLabel   = "Unknown"
+import (
+	"strings"
+	"sync"
 )
+
+const autoDetectCode = "auto"
+
+var (
+	codesOnce sync.Once
+	codes     []string
+	byLower   map[string]string
+)
+
+// Codes returns the language codes accepted by TranslateGemma, without "auto".
+func Codes() []string {
+	loadCodes()
+	out := make([]string, len(codes))
+	copy(out, codes)
+	return out
+}
+
+// Canonical maps a language code to the spelling embedded in the model.
+// The source language "auto" is accepted and returned unchanged.
+func Canonical(code string) (string, bool) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return "", false
+	}
+	if strings.EqualFold(code, autoDetectCode) {
+		return autoDetectCode, true
+	}
+	loadCodes()
+	canon, ok := byLower[strings.ToLower(code)]
+	return canon, ok
+}
+
+func loadCodes() {
+	codesOnce.Do(func() {
+		byLower = make(map[string]string)
+		for _, line := range strings.Split(rawSupportedLanguageCodes, "\n") {
+			code := strings.TrimSpace(line)
+			if code == "" {
+				continue
+			}
+			codes = append(codes, code)
+			byLower[strings.ToLower(code)] = code
+		}
+	})
+}
 
 // Keep this list in sync with the language codes embedded in the TranslateGemma runtime
 // chat template. `zh-CN` is included as a compatibility alias because existing app state

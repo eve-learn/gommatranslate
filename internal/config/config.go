@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 )
 
-const dataDirName = ".translategemma-ui"
+const dataDirName = ".gommatranslate"
 
 // DefaultDataRoot resolves the per-user application data directory.
 func DefaultDataRoot() (string, error) {

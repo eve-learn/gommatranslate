@@ -4,9 +4,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"translategemma-ui/internal/config"
-	"translategemma-ui/internal/models"
-	"translategemma-ui/internal/runtime"
+	"github.com/eve-learn/gommatranslate/internal/config"
+	"github.com/eve-learn/gommatranslate/internal/models"
+	"github.com/eve-learn/gommatranslate/internal/runtime"
 )
 
 // BackendURLTarget is implemented by runtime managers and translators that can swap backends in place.

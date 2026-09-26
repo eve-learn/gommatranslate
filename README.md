@@ -1,151 +1,75 @@
-# TranslateGemmaUI
+# gommatranslate
 
+`gommatranslate` is a Go package that downloads a [TranslateGemma](https://huggingface.co/xzhih/translategemma-4b-it-llamafile) llamafile for the current operating system, runs it locally, and translates text from one language to another.
 
-TranslateGemmaUI is a local TranslateGemma app with:
-
-- a Go CLI entrypoint
-- Bubble Tea TUI mode
-- an embedded Web UI served from the same binary
-- local model download and activation flows
-- streaming text translation output
-- image translation for multimodal runtimes
-
-The app downloads packaged TranslateGemma runtimes from Hugging Face on demand and stores them under the user data directory. End users do not need Go or Bun if they install from GitHub Releases or Homebrew.
-
-
-```bash
-cd desktop
-bun install
-bun run dev
-```
-### Check the version
-
-```bash
-translategemma-ui --version
+```go
+import "github.com/eve-learn/gommatranslate"
 ```
 
-### Manage runtimes from the CLI
+```go
+ctx := context.Background()
 
-```bash
-translategemma-ui models list
-translategemma-ui models download --id q4_k_m
-translategemma-ui models delete --id q4_k_m
-```
-
-### Translate text from the CLI
-
-```bash
-translategemma-ui translate text \
-  --text "Hello world" \
-  --source-lang en \
-  --target-lang zh-CN
-```
-
-### Translate an image from the CLI
-
-```bash
-translategemma-ui translate image \
-  --file /path/to/image.png \
-  --model-id q8_0_vision
-```
-
-## External Translation API
-
-TranslateGemmaUI exposes translation endpoints that can be used by third-party apps, browser UIs, or automation scripts.
-
-Base URL when running locally:
-
-- `http://127.0.0.1:8090`
-
-Available endpoints:
-
-- `POST /api/translate` for single-shot text translation
-- `POST /api/translate/stream` for streaming text translation
-- `POST /api/translate/image` for multipart image translation when the active runtime supports vision
-- `GET /healthz` for a simple health check
-
-`/api/translate*` and `/healthz` send permissive CORS headers and answer `OPTIONS` preflight requests, so browser-based clients from another origin can call them directly.
-
-Text endpoints accept either `application/json` or `application/x-www-form-urlencoded` payloads. Use `source_lang`, `target_lang`, `translation_instruction`, and either `input_text` or `text`. If `source_lang` is omitted it defaults to `auto`; if `target_lang` is omitted it defaults to `zh-CN`.
-
-Example JSON translation request:
-
-```bash
-curl http://127.0.0.1:8090/api/translate \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "source_lang": "en",
-    "target_lang": "zh-CN",
-    "input_text": "Hello world",
-    "translation_instruction": "Use concise UI wording."
-  }'
-```
-
-Example response:
-
-```json
-{
-  "ok": true,
-  "output": "你好，世界",
-  "message": "Translation completed",
-  "messageCode": "translation_completed",
-  "history": {
-    "id": 1,
-    "source": "en",
-    "target": "zh-CN",
-    "input": "Hello world",
-    "output": "你好，世界",
-    "when": "09:27:54"
-  },
-  "count": 1
+client, err := gommatranslate.New(gommatranslate.Options{
+    ModelID: "q4_k_m",
+})
+if err != nil {
+    return err
 }
+defer client.Close()
+
+if err := client.Download(ctx, func(p gommatranslate.DownloadProgress) {
+    fmt.Printf("\r%.0f%% %s", p.Percent, p.Message)
+}); err != nil {
+    return err
+}
+
+if err := client.Start(ctx); err != nil {
+    return err
+}
+
+out, err := client.Translate(ctx, "Hello world", "en", "es")
 ```
 
-Example streaming request:
+`Download` stores the runtime for this machine:
 
-```bash
-curl http://127.0.0.1:8090/api/translate/stream \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "source_lang": "ja",
-    "target_lang": "en",
-    "text": "こんにちは"
-  }'
+- Windows: `*.llamafile.exe`
+- macOS and Linux: an executable `*.llamafile`
+
+The same llamafile binary runs on each of those systems. `Start` launches it as a local HTTP server, picking the next free port when `127.0.0.1:8080` is already in use. `Close` stops the process this client started.
+
+## Translate
+
+```go
+out, err := client.Translate(ctx, "Hello world", "en", "ja")
+
+out, err = client.TranslateRequest(ctx, gommatranslate.Request{
+    Text:        "Save changes?",
+    SourceLang:  "en",
+    TargetLang:  "zh-CN",
+    Instruction: "Use concise UI wording.",
+})
+
+out, err = client.TranslateStream(ctx, "Hello", "en", "fr", func(delta string) error {
+    fmt.Print(delta)
+    return nil
+})
 ```
 
-For successful streaming requests, the response is newline-delimited JSON with `status`, `progress`, `delta`, `error`, and `done` event types. Method errors or malformed payloads return regular HTTP error responses instead of an event stream.
+Leave `SourceLang` empty, or pass `"auto"`, to detect the source language. `TargetLang` is required. Codes match the model, including region tags such as `zh-CN` and `pt-BR`. `Languages()` returns the full list.
 
-Image translation uses `multipart/form-data` with an `image_file` field plus optional `source_lang`, `target_lang`, and `translation_instruction` fields. It accepts JPEG, PNG, and GIF uploads up to 10 MB. If the active runtime does not support vision, the endpoint returns `active_runtime_no_image_support`.
+`Translate`, `TranslateRequest`, and `TranslateStream` return `ErrNotRunning` until `Start` has succeeded.
 
-## Runtime Model Source
+## Models
 
-Default runtime source:
+| ID | Use |
+| --- | --- |
+| `q4_k_m` | Recommended text model |
+| `q6_k` | Higher-quality text model |
+| `q8_0` | Largest text model |
+| `q8_0_vision` | Text and image runtime |
 
-- Hugging Face repo: [xzhih/translategemma-4b-it-llamafile](https://huggingface.co/xzhih/translategemma-4b-it-llamafile)
-- Manifest URL: `https://huggingface.co/xzhih/translategemma-4b-it-llamafile/resolve/main/manifest-v1.json`
+`AvailableModels()` returns the catalog from the Hugging Face manifest. When that manifest cannot be fetched, the package uses this built-in list. An empty `ModelID` selects the recommended text model.
 
-Current runtime matrix:
+Downloaded files, logs, and the selected model are stored in `$HOME/.gommatranslate` unless `Options.DataDir` is set.
 
-- `q4_k_m` for text translation
-- `q6_k` for text translation
-- `q8_0` for text translation
-- `q8_0_vision` for text and image translation
-
-## Data Directory
-
-Default data directory:
-
-- macOS / Linux: `$HOME/.translategemma-ui`
-- Windows: `%USERPROFILE%\\.translategemma-ui`
-
-Created structure:
-
-```text
-<user-home>/.translategemma-ui/
-  config.json
-  history.json
-  state.json
-  logs/
-  runtimes/
-  tmp/
-```
+`example/main.go` is a small program that downloads the default model, starts it, and translates one string.

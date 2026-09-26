@@ -3,8 +3,8 @@ package runtimeutil
 import (
 	"testing"
 
-	"translategemma-ui/internal/config"
-	"translategemma-ui/internal/models"
+	"github.com/eve-learn/gommatranslate/internal/config"
+	"github.com/eve-learn/gommatranslate/internal/models"
 )
 
 type fakeBackendTarget struct {

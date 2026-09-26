@@ -3,8 +3,8 @@ package modelstore
 import (
 	"strings"
 
-	"translategemma-ui/internal/models"
-	"translategemma-ui/internal/runtimeutil"
+	"github.com/eve-learn/gommatranslate/internal/models"
+	"github.com/eve-learn/gommatranslate/internal/runtimeutil"
 )
 
 type ResolveOptions struct {

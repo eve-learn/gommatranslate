@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"translategemma-ui/internal/models"
+	"github.com/eve-learn/gommatranslate/internal/models"
 )
 
 func TestLocalModelPathOnlyAcceptsPackagedRuntime(t *testing.T) {

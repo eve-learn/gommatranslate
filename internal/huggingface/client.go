@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"translategemma-ui/internal/models"
-	"translategemma-ui/internal/platform"
+	"github.com/eve-learn/gommatranslate/internal/models"
+	"github.com/eve-learn/gommatranslate/internal/platform"
 )
 
 const (
