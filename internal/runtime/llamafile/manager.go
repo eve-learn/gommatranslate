@@ -17,6 +17,16 @@ import (
 	"github.com/eve-learn/gommatranslate/internal/runtime"
 )
 
+const (
+	// backendReadyTimeout covers a cold start that inflates a multi-gigabyte
+	// llamafile into memory before the HTTP server binds a port.
+	backendReadyTimeout = 3 * time.Minute
+	// translationContextSize fits a chunked translation prompt plus its
+	// generated output. The packaged model advertises a 128k context, which
+	// allocates several gigabytes of cache and delays the first response.
+	translationContextSize = 8192
+)
+
 type launchCandidate struct {
 	Name string
 	Path string
@@ -271,7 +281,7 @@ func (m *Manager) EnsureRunningWithContext(ctx context.Context, onProgress func(
 		}
 	}(cmd, logf)
 
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(backendReadyTimeout)
 	for {
 		if err := ctx.Err(); err != nil {
 			m.killOwnedLocked()
@@ -286,8 +296,8 @@ func (m *Manager) EnsureRunningWithContext(ctx context.Context, onProgress func(
 			reportProgress(onProgress, Progress{Stage: "load", Percent: 100, Message: "Runtime ready"})
 			return status, nil
 		}
-		elapsed := now.Sub(deadline.Add(-30 * time.Second))
-		percent := 10 + (float64(elapsed)/float64(30*time.Second))*85
+		elapsed := now.Sub(deadline.Add(-backendReadyTimeout))
+		percent := 10 + (float64(elapsed)/float64(backendReadyTimeout))*85
 		if percent > 95 {
 			percent = 95
 		}
@@ -301,6 +311,7 @@ func (m *Manager) EnsureRunningWithContext(ctx context.Context, onProgress func(
 		case <-timer.C:
 		}
 	}
+	m.killOwnedLocked()
 	return runtime.Status{Ready: false, Message: "runtime started but backend is still unreachable"}, fmt.Errorf("backend not reachable after launch; inspect %s", m.LogFile)
 }
 
@@ -333,7 +344,14 @@ func (m *Manager) findRuntimeBinary() (string, error) {
 }
 
 func (m *Manager) buildLaunchCommand(runtimePath, host, port string) (launchCandidate, error) {
-	serverArgs := []string{"--server", "--host", host, "--port", port}
+	serverArgs := []string{
+		"--server",
+		"--host", host,
+		"--port", port,
+		"--ctx-size", strconv.Itoa(translationContextSize),
+		"--parallel", "1",
+		"--no-warmup",
+	}
 	lower := strings.ToLower(runtimePath)
 	if !strings.Contains(lower, ".llamafile") {
 		return launchCandidate{}, fmt.Errorf("unsupported runtime format %q; install a packaged .llamafile from the model catalog", filepath.Base(runtimePath))

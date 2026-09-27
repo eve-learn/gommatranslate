@@ -23,8 +23,17 @@ func TestBuildLaunchCommandLlamafileUsesServerArgs(t *testing.T) {
 		t.Fatalf("buildLaunchCommand returned error: %v", err)
 	}
 	args := strings.Join(candidate.Args, " ")
-	if !strings.Contains(args, "--server") || !strings.Contains(args, "--host 127.0.0.1") || !strings.Contains(args, "--port 8080") {
-		t.Fatalf("expected server launch args, got %q", args)
+	for _, want := range []string{
+		"--server",
+		"--host 127.0.0.1",
+		"--port 8080",
+		"--ctx-size 8192",
+		"--parallel 1",
+		"--no-warmup",
+	} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("expected launch args to contain %q, got %q", want, args)
+		}
 	}
 }
 
