@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/eve-learn/gommatranslate"
 )
@@ -37,14 +38,35 @@ func run() error {
 		return err
 	}
 
-	text := "Hello world"
+	// Batch a couple of translation calls and print the time each call takes
+	type translationJob struct {
+		text       string
+		sourceLang string
+		targetLang string
+	}
+
+	jobs := []translationJob{
+		{"Hello world", "en", "es"},
+		{"How are you?", "en", "fr"},
+	}
+	// If the user passed args, use those as the texts for the batch
 	if len(os.Args) > 1 {
-		text = os.Args[1]
+		jobs = nil
+		for _, arg := range os.Args[1:] {
+			jobs = append(jobs, translationJob{arg, "en", "es"})
+		}
 	}
-	out, err := client.Translate(ctx, text, "en", "es")
-	if err != nil {
-		return err
+
+	for idx, job := range jobs {
+		fmt.Fprintf(os.Stderr, "Translating (%d): %q -> %s...\n", idx+1, job.text, job.targetLang)
+		start := time.Now()
+		out, err := client.Translate(ctx, job.text, job.sourceLang, job.targetLang)
+		elapsed := time.Since(start)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Result (%d): %s\nTranslation took: %v\n\n", idx+1, out, elapsed)
 	}
-	fmt.Println(out)
+
 	return nil
 }
